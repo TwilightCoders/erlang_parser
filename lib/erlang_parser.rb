@@ -17,6 +17,8 @@ module ErlangParser
   def self.parse(str)
     str.gsub!(/[\n\r]/,"")
     Element::Term.new(str).to_ruby
+  rescue Exception => e
+    puts "Couldn't parse Erlang: '#{str}'"
   end
 
 end
