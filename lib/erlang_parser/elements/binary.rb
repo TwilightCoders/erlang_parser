@@ -1,19 +1,32 @@
 module ErlangParser
   module Element
-    class Binary < Term
+
+    class Binary < Enum
+      register '<<', '>>'
+      @delimeter = ','
+
+      # TODO: handle specification.
+      # http://erlang.org/doc/reference_manual/expressions.html#bit_syntax
+      # Ei = Value |
+      #      Value:Size |
+      #      Value/TypeSpecifierList |
+      #      Value:Size/TypeSpecifierList
 
       def to_ruby
-        self.str.gsub!(/[<>]/,"")
-        bin_els = self.str.split(",")
-        els = bin_els.map { |el|
-          if el[/^[0-9]+$/]
-            el.to_i
-          elsif el[/^"/]
-            el.gsub(/"/,"")
+        # using a string literal as in <<"abc">> is syntactic sugar for <<$a,$b,$c>>.
+        @output ||= @terms.collect do |term|
+          case term
+          when Integer
+            term
+          when Element::String
+            # term.to_ruby.scan(/[^$,]/).map(&:sum)
+            term.to_ruby
           end
-        }
-        els.length > 1 ? els : els[0]
+        end.flatten
+
+        one_or_all @output
       end
     end
+
   end
 end

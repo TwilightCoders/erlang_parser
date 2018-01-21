@@ -1,75 +1,85 @@
 module ErlangParser
   module Element
     class Enum < Term
-      attr_accessor :elements
 
-      def initialize(str)
-        @str = str
-        @elements = nil
+      class << self
+        attr_accessor :delimeter
+      end
+
+      attr_accessor :terms
+
+      @delimeter = ','
+
+      def initialize(input)
+        @input = input
+        @terms = self.class.find_terms(@input.dup)
       end
 
       def to_ruby
-        @elements ||= parse_element_strs(get_element_strs) || []
+        @output ||= terms_to_ruby
       end
 
     protected
 
+      def terms_to_ruby
+        @terms_to_ruby ||= @terms.collect do |term|
+          term.is_a?(Term) ? term.to_ruby : term
+        end
+      end
+
+      def one_or_all(array)
+        array.length > 1 ? array : array[0]
+      end
+
       #parse @str to elements to the end of @str, and each elements must be separated by ","
-      def get_element_strs
-        element_strs=[]
-        str_to_parse = @str[1,@str.length-2].strip  # between [ and ], or { and }
-        until str_to_parse == ""
-          term_str, new_str_to_parse = parse_first_term(str_to_parse)
-          element_strs << term_str
-          str_to_parse = new_str_to_parse
+      def self.find_terms(string)
+        elements = []
+        while string && (string = string.strip) != ""
+          term, string = next_term(string)
+          elements << term
         end
-        element_strs
+        elements
       end
 
-      def parse_element_strs(strs)
-        strs.map {|term_str|
-          term = Term.new(term_str)
-          if term.is_a?(Tuple) or term.is_a?(List)
-            term_strs = term.get_element_strs
-            term.elements = term.parse_element_strs(term_strs)
-          end
-          term
-        }
-      end
-
-      def pos_close_str(str, open_str)
-        close_str = PAIRS[open_str]
-        if open_str == close_str
-          return str.index(close_str,1)
+      def self.next_term(string)
+        if term_open = string[Element.openings_regex,1]
+          term_class = Element.lookup[term_open]
+          term_str, string = next_balanced_term(string, term_open, term_class.close)
+          term = term_class.new(term_str)
         else
-          open_count = 1
-          for i in ((str.index(open_str)+1)..(str.length))
-            opened = (str[i,open_str.length ] == open_str)
-            open_count += 1 if opened
-            closed = (str[i,close_str.length] == close_str)
-            open_count -= 1 if closed
-            return i if (closed && open_count==0)
-          end
-          raise "Parse error, not found matching close of #{open_str} in #{str}"
+          term, string = next_open_term(string, delimeter)
         end
+        # Dangling ,'s
+        [term, string&.gsub(/^[#{delimeter}\s]+/,"")]
       end
 
-      def parse_first_term(str_to_parse)
-        open_str = str_to_parse[/^(\[|\{|\"|\'|<<|#Ref|<)/,1]
-        if open_str
-          close_str = PAIRS[open_str]
-          pos_open_str = str_to_parse.index(open_str)
-          pos_close_str = pos_close_str(str_to_parse,open_str)
-          term_str = str_to_parse[pos_open_str..(pos_close_str+close_str.length-1)]
-          new_str_to_parse = str_to_parse[(pos_close_str+close_str.length), str.length]
-        else
-          pos_open_str = 0
-          pos_close_str = str_to_parse.index(",") || str_to_parse.length
-          term_str = str_to_parse[pos_open_str..(pos_close_str-1)]
-          new_str_to_parse = str_to_parse[pos_close_str+1, str.length]
+      def self.next_open_term(string, delimiter)
+        # warn "looking for #{delimiter} in #{string}"
+        pos_close_str = string.index(delimiter) || string.length
+        [Term.find_primative(string[0..(pos_close_str-1)]), string[pos_close_str+1, string.length]]
+      end
+
+      def self.next_balanced_term(string, open, close)
+        scanner = StringScanner.new(string)
+        pattern = Regexp.new("("+[Regexp.escape(open),Regexp.escape(close)].join('|')+")")
+        balance = 0
+
+        loop do
+          # TODO: Handle "escaped" open/close characters?
+          break unless scanner.scan_until(pattern)
+          case scanner.matched
+          when open
+            balance += 1
+          when close
+            balance -= 1
+          end
+          scanner.scan_until(pattern) and balance = 0 if open == close
+          break unless balance > 0
         end
-        new_str_to_parse = "" if new_str_to_parse.nil?
-        [term_str, new_str_to_parse.gsub(/^[,\s]+/,"")]
+        raise "ParseError: looking for '#{open}' and '#{close}' in '#{string}'" unless balance == 0
+        start = string.index(open)+open.length
+        stop = scanner.pos-open.length
+        [string[start...stop], string[scanner.pos..-1]]
       end
 
     end

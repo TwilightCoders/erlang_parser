@@ -1,6 +1,8 @@
 require "bundler/setup"
-require "erlang_parser"
 require 'pry'
+
+require 'erlang_parser'
+
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

@@ -1,10 +1,13 @@
 module ErlangParser
   module Element
+
     class Ref < Term
+      register "#Ref<", ">"
+
       def to_ruby
-        self.str.gsub!(/#Ref<|>/,"")
-        bin_els = self.str.split(".")
+        self.str.split(".")
       end
     end
+
   end
 end
